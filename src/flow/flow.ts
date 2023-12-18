@@ -56,7 +56,7 @@ export class Flow<T> {
     private internalObservers: Map<Flow<unknown>, Observer<T>> = new Map();
 
     private isImmutable = false;
-    private parent: Array<Flow<unknown>> | undefined;
+    private parent?: Array<Flow<unknown>>;
     private transform?: (a: Array<unknown>) => T;
 
     /**
@@ -167,7 +167,7 @@ export class Flow<T> {
         return flow;
     }
 
-    combine<T1, R>(flow1: Flow<T1>, transform: (value0: T, value1: T1) => R): Flow<R> {
+    combine<T1, R>(another: Flow<T1>, transform: (value0: T, value1: T1) => R): Flow<R> {
         const transformInternal = (array: Array<unknown>): R | undefined => {
             for (const value of array) {
                 if (value === undefined) {
@@ -178,15 +178,15 @@ export class Flow<T> {
             return transform(...array);
         }
         const parent = this;
-        const flow = Flow.immutable([this, flow1], transformInternal);
+        const flow = Flow.immutable([this, another], transformInternal);
         const observer0 = new SimpleObserver((value: T) => {
-            flow.setValueInternal(transformInternal([value, flow1.value]));
+            flow.setValueInternal(transformInternal([value, another.value]));
         });
         const observer1 = new SimpleObserver((value: T1) => {
             flow.setValueInternal(transformInternal([parent.value, value]));
         });
         this.addInternalObserver(flow, observer0);
-        flow1.addInternalObserver(flow, observer1);
+        another.addInternalObserver(flow, observer1);
         // @ts-ignore : undefined is a valid return value of transformInternal since it will be ignored by
         // setValueInternal
         return flow;

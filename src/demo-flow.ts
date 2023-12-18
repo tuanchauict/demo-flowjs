@@ -1,8 +1,7 @@
 import {Flow, LifecycleOwner} from "./flow";
 
 export function demo() {
-    let lifecycleOwner = new LifecycleOwner();
-    lifecycleOwner.onStart();
+    let lifecycleOwner = LifecycleOwner.start();
     let flow = new Flow<number>();
     let randomFlow = new Flow<number>();
 

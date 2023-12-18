@@ -14,6 +14,12 @@ export class LifecycleOwner {
     private observers: LifecycleObserver[] = [];
     private state: LifecycleState = LifecycleState.INITIALIZED;
 
+    static start(): LifecycleOwner {
+        let owner = new LifecycleOwner();
+        owner.onStart();
+        return owner;
+    }
+
     get isActive(): boolean {
         return this.state == LifecycleState.STARTED;
     }
