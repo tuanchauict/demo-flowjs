@@ -76,6 +76,62 @@ export class Flow<T> {
         return flow;
     }
 
+    static combine2<T0, T1, R>(
+        flow0: Flow<T0>,
+        flow1: Flow<T1>,
+        transform: (value0: T0, value1: T1) => R
+    ): Flow<R> {
+        return Flow.combineList([flow0, flow1], (array) => {
+            return transform(array[0] as T0, array[1] as T1);
+        });
+    }
+
+    static combine3<T0, T1, T2, R>(
+        flow0: Flow<T0>,
+        flow1: Flow<T1>,
+        flow2: Flow<T2>,
+        transform: (value0: T0, value1: T1, value2: T2) => R
+    ): Flow<R> {
+        return Flow.combineList([flow0, flow1, flow2], (array) => {
+            return transform(array[0] as T0, array[1] as T1, array[2] as T2);
+        });
+    }
+
+    static combine4<T0, T1, T2, T3, R>(
+        flow0: Flow<T0>,
+        flow1: Flow<T1>,
+        flow2: Flow<T2>,
+        flow3: Flow<T3>,
+        transform: (value0: T0, value1: T1, value2: T2, value3: T3) => R
+    ): Flow<R> {
+        return Flow.combineList([flow0, flow1, flow2, flow3], (array) => {
+            return transform(array[0] as T0, array[1] as T1, array[2] as T2, array[3] as T3);
+        });
+    }
+
+    static combineList<R>(flows: Array<Flow<unknown>>, transform: (values: Array<unknown>) => R): Flow<R> {
+        if (flows.length == 0) {
+            throw new Error("flows must not be empty");
+        }
+        if (flows.length == 1) {
+            console.warn("You are combining a single flow. Use flow.map instead.");
+            // @ts-ignore : Allow unsafe call to transform.
+            return flows[0].map(transform);
+        }
+
+        let flow = Flow.immutable(flows, transform);
+        for (let parent of flows) {
+            parent.addInternalObserver(flow, new SimpleObserver((_) => {
+                let values = flows.map(flow => flow.valueInternal);
+                if (values.includes(undefined)) {
+                    return;
+                }
+                flow.setValueInternal(transform(values));
+            }));
+        }
+        return flow;
+    }
+
     // @ts-ignore : Allow the value to be undefined.
     constructor(value: T = undefined) {
         if (value !== undefined) {
@@ -168,28 +224,7 @@ export class Flow<T> {
     }
 
     combine<T1, R>(another: Flow<T1>, transform: (value0: T, value1: T1) => R): Flow<R> {
-        const transformInternal = (array: Array<unknown>): R | undefined => {
-            for (const value of array) {
-                if (value === undefined) {
-                    return undefined;
-                }
-            }
-            // @ts-ignore
-            return transform(...array);
-        }
-        const parent = this;
-        const flow = Flow.immutable([this, another], transformInternal);
-        const observer0 = new SimpleObserver((value: T) => {
-            flow.setValueInternal(transformInternal([value, another.value]));
-        });
-        const observer1 = new SimpleObserver((value: T1) => {
-            flow.setValueInternal(transformInternal([parent.value, value]));
-        });
-        this.addInternalObserver(flow, observer0);
-        another.addInternalObserver(flow, observer1);
-        // @ts-ignore : undefined is a valid return value of transformInternal since it will be ignored by
-        // setValueInternal
-        return flow;
+        return Flow.combine2(this, another, transform);
     }
 
     /**
@@ -216,6 +251,7 @@ export class Flow<T> {
                 this.valueInternal = undefined;
             }
         }));
+        // TODO: Something is not correct here. Current value is not delegated to the observer.
         this.delegateValueToObserver(simpleObserver, this.valueInternal);
     }
 
