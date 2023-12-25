@@ -119,11 +119,12 @@ export class Flow<T> {
             return flows[0].map(transform);
         }
 
-        let flow = Flow.immutable(flows, transform);
+        const flow = Flow.immutable(flows, transform);
         for (let parent of flows) {
             parent.addInternalObserver(flow, new SimpleObserver((_) => {
                 let values = flows.map(flow => flow.valueInternal);
                 if (values.includes(undefined)) {
+                    // Only update the value when all values are available.
                     return;
                 }
                 flow.setValueInternal(transform(values));
@@ -183,6 +184,8 @@ export class Flow<T> {
      * Makes the value of this flow updated when the parent flow's value changes regardless of whether this flow has
      * subscribers.
      * This method is useful when reading the current value of the flow is required rather than observing the flow.
+     *
+     * Note that this method also makes the parents of this flow updated reactively.
      */
     makeValueUpdateReactively() {
         this.isValueUpdatedReactivelyRequired = true;
@@ -193,7 +196,7 @@ export class Flow<T> {
     }
 
     map<R>(transform: (value: T) => R): Flow<R> {
-        let flow = Flow.immutable([this], transform);
+        const flow = Flow.immutable([this], (args: Array<T>) => transform(args[0]));
         this.addInternalObserver(flow,
             new SimpleObserver((value) => {
                 flow.setValueInternal(transform(value));
@@ -202,8 +205,14 @@ export class Flow<T> {
         return flow;
     }
 
+    /**
+     * Returns a flow that only emits a value when the current value is different from the previous value.
+     *
+     * Note: the first value set to the parent flow will always be emitted even if it is the same as the previous value.
+     * This is a limitation of the current implementation.
+     */
     distinctUntilChanged(): Flow<T> {
-        let flow = Flow.immutable([this], (value: T) => value);
+        const flow = Flow.immutable([this], (args: Array<T>) => args[0]);
         this.addInternalObserver(flow, new SimpleObserver((value) => {
             if (value !== flow.valueInternal && value !== undefined) {
                 flow.setValueInternal(value);
@@ -216,7 +225,7 @@ export class Flow<T> {
         if (timeout < 0) {
             return this;
         }
-        const flow = Flow.immutable([this], (value: T) => value);
+        const flow = Flow.immutable([this], (args: Array<T>) => args[0]);
         this.addInternalObserver(flow, new ThrottleObserver(new SimpleObserver((value) => {
             flow.setValueInternal(value);
         }), timeout));
@@ -228,10 +237,12 @@ export class Flow<T> {
     }
 
     /**
-     * Observe this flow.
-     * The observer will be called immediately with the current value of the flow.
+     * Observes this flow with active lifecycle owner.
+     *
+     * The observer will be called immediately with the current defined value of the flow (do nothing if the current
+     * value is undefined).
      * @param lifecycleOwner The lifecycle owner that the observer will be attached to. The observer will be removed
-     * when the lifecycle owner is stopped. If the lifecycle owner is already not active, the observer will not be added.
+     * when the lifecycle owner is stopped. If the lifecycle owner is inactive, the observer will not be added.
      * @param observer
      */
     observe(lifecycleOwner: LifecycleOwner, observer: (value: T) => void) {
@@ -245,14 +256,14 @@ export class Flow<T> {
             if (index !== -1) {
                 this.observers.splice(index, 1);
             }
-            if (!this.hasSubscribers()) {
+            if (this.isImmutable && !this.hasSubscribers()) {
                 // When there are no more subscribers, we can clear the value since the parent flow will not propagate
                 // its state to this flow anymore.
                 this.valueInternal = undefined;
             }
         }));
-        // TODO: Something is not correct here. Current value is not delegated to the observer.
-        this.delegateValueToObserver(simpleObserver, this.valueInternal);
+
+        this.delegateValueToObserver(simpleObserver, this.value);
     }
 
     private addInternalObserver(key: Flow<unknown>, observer: Observer<T>) {
