@@ -156,7 +156,7 @@ export class Flow<T> {
             return this.valueInternal;
         }
         const args = this.parent?.map(flow => flow.value);
-        if (args === undefined) {
+        if (args === undefined || args.includes(undefined)) {
             return undefined;
         }
         return this.transform!(args);
